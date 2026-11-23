@@ -19,7 +19,7 @@ const req = (body, extra = {}) => ({ method: "POST", headers: { "x-forwarded-for
 
 const realFetch = globalThis.fetch;
 let lastCall;
-beforeEach(() => { process.env.GEMINI_API_KEY = "test-key"; lastCall = null; });
+beforeEach(() => { process.env.GEMINI_API_KEY = "test-key"; delete process.env.GROQ_API_KEY; lastCall = null; });
 afterEach(() => { globalThis.fetch = realFetch; });
 
 function mockGemini(text) {
@@ -120,4 +120,85 @@ test("rate limit returns 429 with Retry-After after 20 requests from one IP", as
   }
   assert.equal(last.statusCode, 429);
   assert.ok(last.headers["retry-after"]);
+});
+
+
+test("503 overloaded: retries once, then succeeds", async () => {
+  let n = 0;
+  globalThis.fetch = async () => {
+    n++;
+    if (n < 2) return new Response(JSON.stringify({ error: { message: "high demand" } }), { status: 503 });
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "retry ok" }] } }] }), { status: 200 });
+  };
+  const res = mockRes();
+  await handler(req({ mode: "coach", messages: [{ role: "user", content: "hi" }] }), res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.reply, "retry ok");
+  assert.equal(n, 2);
+});
+
+test("503 on every attempt gives a friendly 'busy' message", async () => {
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: { message: "high demand" } }), { status: 503 });
+  const res = mockRes();
+  await handler(req({ mode: "coach", messages: [{ role: "user", content: "hi" }] }), res);
+  assert.equal(res.statusCode, 502);
+  assert.match(res.body.error, /very busy/);
+});
+
+const groqOk = (text) => new Response(JSON.stringify({ choices: [{ message: { content: text } }] }), { status: 200 });
+
+test("Groq is used first when GROQ_API_KEY is set (Bearer header, system prompt, no Gemini call)", async () => {
+  process.env.GROQ_API_KEY = "groq-test";
+  const urls = [];
+  globalThis.fetch = async (url, opts) => { urls.push(url); lastCall = { opts, body: JSON.parse(opts.body) }; return groqOk("from groq"); };
+  const res = mockRes();
+  await handler(req({ mode: "coach", messages: [{ role: "user", content: "hi" }] }), res);
+  assert.equal(res.body.reply, "from groq");
+  assert.deepEqual(urls, ["https://api.groq.com/openai/v1/chat/completions"]);
+  assert.equal(lastCall.opts.headers.Authorization, "Bearer groq-test");
+  assert.equal(lastCall.body.messages[0].role, "system");
+  assert.match(lastCall.body.messages[0].content, /Prompt Coach/);
+  assert.equal(lastCall.body.messages[1].content, "hi");
+});
+
+test("Groq judge mode asks for JSON output", async () => {
+  process.env.GROQ_API_KEY = "groq-test";
+  globalThis.fetch = async (url, opts) => { lastCall = { body: JSON.parse(opts.body) }; return groqOk("{}"); };
+  await handler(req({ mode: "judge", messages: [{ role: "user", content: "x" }] }), mockRes());
+  assert.deepEqual(lastCall.body.response_format, { type: "json_object" });
+});
+
+test("Groq failure (429) falls back to Gemini automatically", async () => {
+  process.env.GROQ_API_KEY = "groq-test";
+  const urls = [];
+  globalThis.fetch = async (url) => {
+    urls.push(url);
+    if (url.includes("groq.com")) return new Response(JSON.stringify({ error: { message: "rate" } }), { status: 429 });
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "from gemini" }] } }] }), { status: 200 });
+  };
+  const res = mockRes();
+  await handler(req({ mode: "coach", messages: [{ role: "user", content: "hi" }] }), res);
+  assert.equal(res.body.reply, "from gemini");
+  assert.ok(urls[0].includes("groq.com") && urls[1].includes("generativelanguage"));
+});
+
+test("Groq streaming is converted to our SSE format", async () => {
+  process.env.GROQ_API_KEY = "groq-test";
+  const sse = 'data: {"choices":[{"delta":{"content":"He"}}]}\n\ndata: {"choices":[{"delta":{"content":"llo"}}]}\n\ndata: [DONE]\n\n';
+  globalThis.fetch = async (url, opts) => { lastCall = { body: JSON.parse(opts.body) }; return new Response(sse, { status: 200 }); };
+  const res = mockRes();
+  await handler(req({ mode: "coach", stream: true, messages: [{ role: "user", content: "hi" }] }), res);
+  assert.equal(lastCall.body.stream, true);
+  const out = res.chunks.join("");
+  assert.match(out, /data: {"t":"He"}/);
+  assert.match(out, /data: {"t":"llo"}/);
+  assert.match(out, /data: \[DONE\]/);
+});
+
+test("with no keys set the server returns a clear 500", async () => {
+  delete process.env.GEMINI_API_KEY; delete process.env.GROQ_API_KEY;
+  const res = mockRes();
+  await handler(req({ mode: "coach", messages: [{ role: "user", content: "hi" }] }), res);
+  assert.equal(res.statusCode, 500);
+  assert.match(res.body.error, /GROQ_API_KEY or GEMINI_API_KEY/);
 });
