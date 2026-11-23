@@ -7,7 +7,7 @@
 
 import { createLimiter } from "../lib/rateLimit.js";
 
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
 const MAX_MESSAGES = 10;
 const limiter = createLimiter({ limit: 20, windowMs: 60_000 }); // 20 requests / minute / IP
