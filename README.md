@@ -34,7 +34,7 @@ Engineering and school students learning prompt engineering, including Hindi/Hin
 | 12 | **English / Hinglish interface** | Toggle button in the navbar |
 | 13 | **Polish** | Favicon, meta tags, 404 page, loading skeletons, toast messages, reduced-motion support |
 | 14 | **Rate limiting** | 20 requests / minute / IP in the API to prevent key misuse |
-| 15 | **Automated tests + CI** | 23 unit tests (`npm test`) and a GitHub Actions workflow |
+| 15 | **Automated tests + CI** | 30 unit tests (`npm test`) and a GitHub Actions workflow |
 
 ## Architecture
 
@@ -70,7 +70,7 @@ promptforge/
 ```
 
 ## Technologies
-HTML, CSS, vanilla JavaScript (ES modules), Chart.js, Vercel Serverless Functions (Node.js), Google Gemini API, Server-Sent Events, Web Speech API, Canvas API, GitHub Actions, Node test runner.
+HTML, CSS, vanilla JavaScript (ES modules), Chart.js, Vercel Serverless Functions (Node.js), Groq API (primary) + Google Gemini API (automatic backup), Server-Sent Events, Web Speech API, Canvas API, GitHub Actions, Node test runner.
 
 ## AI tools used
 | Tool | Contribution |
@@ -82,14 +82,14 @@ HTML, CSS, vanilla JavaScript (ES modules), Chart.js, Vercel Serverless Function
 ## How the chatbot works
 1. User types (or speaks) in the chat widget. `script.js` blocks empty and >1000 character messages.
 2. The browser sends `POST /api/chat` with `{ mode: "coach", messages, stream: true }`.
-3. `api/chat.js` checks the rate limit, validates input, adds the Prompt Coach system prompt and calls Gemini `streamGenerateContent` using `GEMINI_API_KEY` from environment variables.
-4. Gemini's stream is converted into small events (`data: {"t":"..."}`) and the browser appends text as it arrives (typing effect).
+3. `api/chat.js` checks the rate limit, validates input, adds the Prompt Coach system prompt and calls the Groq API using `GROQ_API_KEY` from environment variables. If Groq is busy or fails, it automatically retries on Gemini (`GEMINI_API_KEY`).
+4. The provider's stream is converted into small events (`data: {"t":"..."}`) and the browser appends text as it arrives (typing effect).
 5. On any error (offline, 429, API error, empty reply) a friendly message is shown and the failed message is removed from history.
 
 ## Run locally
 ```bash
 npm i -g vercel
-cp .env.example .env      # then paste your key from https://aistudio.google.com/apikey
+cp .env.example .env      # then paste your keys from https://console.groq.com and https://aistudio.google.com/apikey
 vercel dev                # open the URL it prints
 ```
 Run tests: `npm test` (needs Node 18+).
@@ -97,7 +97,7 @@ Run tests: `npm test` (needs Node 18+).
 ## Deploy on Vercel
 1. Push this repo to GitHub.
 2. Vercel → New Project → import the repo.
-3. Settings → Environment Variables → add `GEMINI_API_KEY` (optional: `GEMINI_MODEL`).
+3. Settings → Environment Variables → add `GROQ_API_KEY` (primary) and `GEMINI_API_KEY` (backup). Optional: `GROQ_MODEL`, `GEMINI_MODEL`. Redeploy after changing variables.
 4. Deploy, then paste the live URL at the top of this README.
 
 ## Notes
@@ -114,4 +114,3 @@ Run tests: `npm test` (needs Node 18+).
 
 ## Prompt documentation
 See [PROMPTS.md](PROMPTS.md).
-# promptforge
