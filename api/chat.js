@@ -1,5 +1,6 @@
 // Vercel Serverless Function: POST /api/chat
-// The Gemini API key stays on the server (process.env.GEMINI_API_KEY).
+// API keys stay on the server: process.env.GROQ_API_KEY (tried first) and process.env.GEMINI_API_KEY (backup).
+// If Groq fails (busy, quota, error) the request automatically goes to Gemini.
 //
 // Request body: { mode, messages: [{role, content}], stream?: boolean }
 // Modes: coach | hinglish | rewrite | judge | run | battlejudge
@@ -7,10 +8,11 @@
 
 import { createLimiter } from "../lib/rateLimit.js";
 
+const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-20b"; // use the exact model name shown in your Groq console
 const MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || ""; // optional: a second model name to try if the main one is busy
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MAX_MESSAGES = 10;
 const limiter = createLimiter({ limit: 20, windowMs: 60_000 }); // 20 requests / minute / IP
 
@@ -70,8 +72,11 @@ Return ONLY valid JSON: {"score": <integer 0-100>, "reason": "<one short sentenc
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Only POST is allowed." });
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: "Server is missing GEMINI_API_KEY." });
+  // Providers in priority order. Only the ones with a key set are used.
+  const providers = [];
+  if (process.env.GROQ_API_KEY) providers.push({ kind: "groq", model: GROQ_MODEL, key: process.env.GROQ_API_KEY });
+  if (process.env.GEMINI_API_KEY) providers.push({ kind: "gemini", model: MODEL, key: process.env.GEMINI_API_KEY });
+  if (!providers.length) return res.status(500).json({ error: "Server is missing an API key (set GROQ_API_KEY or GEMINI_API_KEY)." });
 
   // ---- Rate limit ----
   const ip = String(req.headers?.["x-forwarded-for"] || req.socket?.remoteAddress || "unknown").split(",")[0].trim();
@@ -96,45 +101,68 @@ export default async function handler(req, res) {
   if (!contents.length) return res.status(400).json({ error: "No user message." });
 
   const wantStream = body.stream === true && !cfg.json;
-  const urlFor = (model) => `${BASE}${model}:${wantStream ? "streamGenerateContent?alt=sse" : "generateContent"}`;
-  const payload = {
-    systemInstruction: { parts: [{ text: cfg.system }] },
-    contents,
-    generationConfig: {
-      temperature: cfg.temperature,
-      maxOutputTokens: cfg.maxTokens,
-      ...(cfg.json ? { responseMimeType: "application/json" } : {}),
-    },
-  };
 
-  // ---- Call Gemini ----
+  // Build the request for each provider (same prompt, different API shape).
+  function buildRequest(p) {
+    if (p.kind === "groq") {
+      return {
+        url: GROQ_URL,
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + p.key },
+        body: {
+          model: p.model,
+          messages: [
+            { role: "system", content: cfg.system },
+            ...contents.map((c) => ({ role: c.role === "model" ? "assistant" : "user", content: c.parts[0].text })),
+          ],
+          temperature: cfg.temperature,
+          max_tokens: cfg.maxTokens,
+          stream: wantStream,
+          ...(cfg.json ? { response_format: { type: "json_object" } } : {}),
+        },
+      };
+    }
+    return {
+      url: `${BASE}${p.model}:${wantStream ? "streamGenerateContent?alt=sse" : "generateContent"}`,
+      headers: { "Content-Type": "application/json", "x-goog-api-key": p.key },
+      body: {
+        systemInstruction: { parts: [{ text: cfg.system }] },
+        contents,
+        generationConfig: {
+          temperature: cfg.temperature,
+          maxOutputTokens: cfg.maxTokens,
+          ...(cfg.json ? { responseMimeType: "application/json" } : {}),
+        },
+      },
+    };
+  }
+
+  // ---- Call the AI (Groq first, then Gemini) ----
   try {
-    // Gemini is sometimes overloaded (503/500). Try: main model, again, then the optional fallback model (or main again).
-    const attempts = [MODEL, MODEL, FALLBACK_MODEL || MODEL].filter(Boolean);
-    let r;
-    for (let i = 0; i < attempts.length; i++) {
-      r = await fetch(urlFor(attempts[i]), {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify(payload),
-      });
-      const retryable = r.status === 503 || r.status === 500 || r.status === 404; // overloaded or model retired
-      if (r.ok || !retryable || i === attempts.length - 1) break;
-      await sleep(i === 0 ? 700 : 1500); // short pause between tries
+    let r, used;
+    outer:
+    for (const p of providers) {
+      used = p;
+      const rq = buildRequest(p);
+      for (let attempt = 0; attempt < 2; attempt++) {
+        r = await fetch(rq.url, { method: "POST", headers: rq.headers, body: JSON.stringify(rq.body) });
+        if (r.ok) break outer;
+        if ((r.status === 503 || r.status === 500) && attempt === 0) { await sleep(500); continue; } // busy: retry once
+        break; // quota (429), bad model (404), bad key (401) etc: go to the next provider
+      }
     }
 
     if (!r.ok) {
       const data = await r.json().catch(() => ({}));
       const msg = r.status === 429 ? "AI quota reached. Try again in a minute."
         : r.status === 503 ? "The AI is very busy right now. Please try again in a few seconds."
-        : (data.error && data.error.message) || "Gemini API error";
+        : (data.error && data.error.message) || "AI API error";
       return res.status(r.status === 429 ? 429 : 502).json({ error: msg });
     }
 
-    if (wantStream) return await pipeStream(r, res);
+    if (wantStream) return await pipeStream(r, res, used.kind);
 
     const data = await r.json();
-    const reply = data.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") || "";
+    const reply = extractText(used.kind, data);
     if (!reply) return res.status(502).json({ error: "AI returned an empty response. Try rephrasing." });
     return res.status(200).json({ reply });
   } catch (err) {
@@ -143,8 +171,14 @@ export default async function handler(req, res) {
   }
 }
 
-// Converts Gemini's SSE stream into our small SSE format: data: {"t":"text"}
-async function pipeStream(r, res) {
+// Pulls the text out of one response (or one stream chunk) for either provider.
+function extractText(kind, data) {
+  if (kind === "groq") return data.choices?.[0]?.message?.content || data.choices?.[0]?.delta?.content || "";
+  return data.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") || "";
+}
+
+// Converts the provider's SSE stream into our small SSE format: data: {"t":"text"}
+async function pipeStream(r, res, kind) {
   res.statusCode = 200;
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -159,10 +193,10 @@ async function pipeStream(r, res) {
     line = line.trim();
     if (!line.startsWith("data:")) return;
     const payload = line.slice(5).trim();
-    if (!payload) return;
+    if (!payload || payload === "[DONE]") return;
     try {
       const j = JSON.parse(payload);
-      const t = j.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") || "";
+      const t = extractText(kind, j);
       if (t) { any = true; res.write(`data: ${JSON.stringify({ t })}\n\n`); }
     } catch { /* ignore partial/non-JSON lines */ }
   };
