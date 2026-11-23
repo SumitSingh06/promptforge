@@ -8,6 +8,8 @@
 import { createLimiter } from "../lib/rateLimit.js";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-2.5-flash"; // used if the main model is busy/unavailable
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
 const MAX_MESSAGES = 10;
 const limiter = createLimiter({ limit: 20, windowMs: 60_000 }); // 20 requests / minute / IP
@@ -94,7 +96,7 @@ export default async function handler(req, res) {
   if (!contents.length) return res.status(400).json({ error: "No user message." });
 
   const wantStream = body.stream === true && !cfg.json;
-  const url = `${BASE}${MODEL}:${wantStream ? "streamGenerateContent?alt=sse" : "generateContent"}`;
+  const urlFor = (model) => `${BASE}${model}:${wantStream ? "streamGenerateContent?alt=sse" : "generateContent"}`;
   const payload = {
     systemInstruction: { parts: [{ text: cfg.system }] },
     contents,
@@ -107,15 +109,25 @@ export default async function handler(req, res) {
 
   // ---- Call Gemini ----
   try {
-    const r = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify(payload),
-    });
+    // Gemini is sometimes overloaded (503/500). Try: main model, main model again, then the fallback model.
+    const attempts = [MODEL, MODEL, FALLBACK_MODEL].filter(Boolean);
+    let r;
+    for (let i = 0; i < attempts.length; i++) {
+      r = await fetch(urlFor(attempts[i]), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify(payload),
+      });
+      const retryable = r.status === 503 || r.status === 500 || r.status === 404; // overloaded or model retired
+      if (r.ok || !retryable || i === attempts.length - 1) break;
+      await sleep(i === 0 ? 700 : 0); // short pause only before the 2nd try
+    }
 
     if (!r.ok) {
       const data = await r.json().catch(() => ({}));
-      const msg = r.status === 429 ? "AI quota reached. Try again in a minute." : (data.error && data.error.message) || "Gemini API error";
+      const msg = r.status === 429 ? "AI quota reached. Try again in a minute."
+        : r.status === 503 ? "The AI is very busy right now. Please try again in a few seconds."
+        : (data.error && data.error.message) || "Gemini API error";
       return res.status(r.status === 429 ? 429 : 502).json({ error: msg });
     }
 
