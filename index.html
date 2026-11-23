@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PromptForge – Forge better prompts</title>
+  <meta name="description" content="Score, fix and practice your prompts with the five parts of a good prompt. Includes AI Judge, Prompt Battle and the Prompt Coach chatbot." />
+  <meta name="theme-color" content="#0b0b10" />
+  <meta property="og:title" content="PromptForge – Forge better prompts" />
+  <meta property="og:description" content="Learn prompt engineering by scoring, fixing and practicing your prompts." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="nav">
+    <div class="logo">🔥 PromptForge</div>
+    <nav>
+      <a href="#xray" data-i18n="nav_xray">X-Ray</a>
+      <a href="#battle" data-i18n="nav_battle">Battle</a>
+      <a href="#hinglish">Hinglish</a>
+      <a href="#lab" data-i18n="nav_lab">Lab</a>
+      <a href="#history" data-i18n="nav_history">History</a>
+    </nav>
+    <div class="toggles">
+      <button id="langBtn" class="icon-btn" title="Switch interface language (English / Hinglish)" aria-label="Switch language">हिं</button>
+      <button id="themeBtn" class="icon-btn" title="Toggle dark / light theme" aria-label="Toggle theme">☀️</button>
+    </div>
+  </header>
+
+  <section class="hero">
+    <h1><span data-i18n="hero_a">Forge</span> <span class="glow" data-i18n="hero_b">better prompts.</span></h1>
+    <p data-i18n="hero_p">Paste your prompt. Get a score on the 5 parts of a good prompt, see what's missing, and fix it like a pro.</p>
+    <a href="#xray" class="btn" data-i18n="hero_cta">Start X-Ray ⚡</a>
+  </section>
+
+  <!-- 1. PROMPT X-RAY -->
+  <section id="xray" class="card-section">
+    <h2>🩻 Prompt X-Ray</h2>
+    <p class="sub" data-i18n="xray_sub">Checks Role, Task, Context, Constraints and Output Format. Use Instant (rules) or AI Judge (Gemini).</p>
+    <div class="grid2">
+      <div class="card">
+        <div class="field">
+          <textarea id="xrayInput" rows="9" maxlength="1500" data-i18n-ph="xray_ph" placeholder="Paste your prompt here...&#10;e.g. Write about AI"></textarea>
+          <button id="micXray" class="mic" type="button" title="Speak your prompt" aria-label="Voice input">🎤</button>
+        </div>
+        <div class="row">
+          <button id="analyzeBtn" class="btn" data-i18n="btn_analyze">Analyze</button>
+          <button id="judgeBtn" class="btn">🤖 AI Judge</button>
+          <button id="sampleBtn" class="btn ghost" data-i18n="btn_sample">Load sample</button>
+        </div>
+      </div>
+      <div class="card" id="xrayResult" hidden>
+        <div class="score-wrap">
+          <div class="score-ring" id="scoreRing"><span id="scoreNum">0</span></div>
+          <div>
+            <h3 id="scoreLabel"></h3>
+            <p id="scoreHint" class="muted"></p>
+          </div>
+        </div>
+        <canvas id="radar" height="220"></canvas>
+        <ul id="partsList" class="parts"></ul>
+        <div class="row">
+          <button id="shareBtn" class="btn ghost">📸 Share card</button>
+          <button id="txtBtn" class="btn ghost">⬇️ .txt</button>
+          <button id="pdfBtn" class="btn ghost">🖨️ PDF</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="rewriteCard" hidden>
+      <h3>✨ Improved Rewrite</h3>
+      <p class="muted">Template = instant. "Improve with AI" = Gemini rewrite, then a Before/After diff.</p>
+      <pre id="rewriteOut"></pre>
+      <div class="row">
+        <button id="copyRewrite" class="btn ghost">Copy</button>
+        <button id="aiRewrite" class="btn">Improve with AI</button>
+      </div>
+      <pre id="aiRewriteOut" hidden></pre>
+    </div>
+
+    <div class="card" id="diffCard" hidden>
+      <h3>🔀 Before / After</h3>
+      <p class="muted"><del>red</del> = removed from your prompt, <ins>green</ins> = added by the improved version.</p>
+      <div id="diffBody" class="diff"></div>
+    </div>
+  </section>
+
+  <!-- 2. PROMPT BATTLE -->
+  <section id="battle" class="card-section">
+    <h2>⚔️ Prompt Battle</h2>
+    <p class="sub" data-i18n="battle_sub">Write a prompt that would produce the target output. 5 levels.</p>
+    <div class="card">
+      <div class="stats">
+        <span>Level: <b id="lvl">1</b>/5</span>
+        <span>Points: <b id="pts">0</b></span>
+        <span>🔥 Streak: <b id="streak">0</b></span>
+      </div>
+      <div class="target">
+        <strong>🎯 Target output:</strong>
+        <p id="targetText"></p>
+      </div>
+      <div class="field">
+        <textarea id="battleInput" rows="5" maxlength="1000" placeholder="Write your prompt to get exactly this output..."></textarea>
+      </div>
+      <label class="check"><input type="checkbox" id="battleAi" /> 🤖 AI mode: run my prompt with Gemini and let an AI judge compare it to the target</label>
+      <div class="row">
+        <button id="battleBtn" class="btn">Submit</button>
+        <button id="nextBtn" class="btn ghost" hidden>Next level →</button>
+        <button id="resetBtn" class="btn ghost">Reset game</button>
+      </div>
+      <ul id="battleFeedback" class="parts"></ul>
+      <div id="battleOutWrap" hidden>
+        <strong>AI output for your prompt:</strong>
+        <pre id="battleOut"></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. HINGLISH MODE -->
+  <section id="hinglish" class="card-section">
+    <h2>🗣️ Hinglish Mode</h2>
+    <p class="sub">Hinglish mein likho, structured English prompt pao.</p>
+    <div class="grid2">
+      <div class="card">
+        <div class="field">
+          <textarea id="hingInput" rows="6" maxlength="1500" placeholder="e.g. Mujhe photosynthesis class 7 ke bacchon ko samjhana hai simple tarike se"></textarea>
+          <button id="micHing" class="mic" type="button" title="Speak" aria-label="Voice input">🎤</button>
+        </div>
+        <button id="hingBtn" class="btn">Convert ➜</button>
+      </div>
+      <div class="card">
+        <pre id="hingOut">Your structured prompt will appear here.</pre>
+        <button id="copyHing" class="btn ghost">Copy</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. TECHNIQUE LAB (live) -->
+  <section id="lab" class="card-section">
+    <h2>🧪 Technique Lab</h2>
+    <p class="sub">Type one task. We run it with 4 techniques using Gemini so you can compare the real outputs.</p>
+    <div class="card">
+      <textarea id="labTask" rows="2" maxlength="300">Explain why the sky is blue.</textarea>
+      <div class="row">
+        <button id="labRun" class="btn">Run all 4 techniques ▶</button>
+      </div>
+    </div>
+    <div class="grid4" id="labGrid"></div>
+  </section>
+
+  <!-- 5. HISTORY -->
+  <section id="history" class="card-section">
+    <h2>📈 Your Progress</h2>
+    <p class="sub">Every X-Ray score is saved in this browser so you can see yourself improve.</p>
+    <div class="card">
+      <p id="histEmpty" class="muted">No scores yet. Run the X-Ray to start your graph.</p>
+      <canvas id="histChart" height="120" hidden></canvas>
+      <ul id="histList" class="parts"></ul>
+      <button id="histClear" class="btn ghost">Clear history</button>
+    </div>
+  </section>
+
+  <footer>Built with ❤️ for the Prompt Engineering course • PromptForge</footer>
+
+  <!-- 6. PROMPT COACH CHATBOT -->
+  <button id="chatFab" aria-label="Open Prompt Coach">💬</button>
+  <div id="chatBox" class="chatbox" hidden>
+    <div class="chat-head">
+      <span>🔥 Prompt Coach</span>
+      <span class="chat-actions">
+        <button id="chatClear" title="Clear chat" aria-label="Clear chat">🗑️</button>
+        <button id="chatClose" aria-label="Close">✕</button>
+      </span>
+    </div>
+    <div id="chatLog" class="chat-log"></div>
+    <form id="chatForm" class="chat-form">
+      <button id="micChat" class="mic small" type="button" title="Speak" aria-label="Voice input">🎤</button>
+      <input id="chatInput" type="text" maxlength="1000" placeholder="Ask about prompts..." autocomplete="off" />
+      <button id="chatSend" class="btn" type="submit">Send</button>
+    </form>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="script.js"></script>
+</body>
+</html>

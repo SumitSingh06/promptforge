@@ -1,0 +1,14 @@
+{
+  "name": "promptforge",
+  "version": "2.0.0",
+  "private": true,
+  "description": "PromptForge - learn prompt engineering by scoring and improving prompts",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "dev": "vercel dev"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
