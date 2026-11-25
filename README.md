@@ -42,7 +42,7 @@ Engineering and school students learning prompt engineering, including Hindi/Hin
 flowchart LR
   U[Student in browser] -->|HTML + CSS + JS modules| F[Frontend: script.js]
   F -->|POST /api/chat<br/>mode + messages| A[Vercel Serverless Function<br/>api/chat.js]
-  A -->|rate limit + validation<br/>+ system prompt for the mode| G[(Gemini API)]
+  A -->|rate limit + validation<br/>+ system prompt for the mode| G[(Gemini API/ GROQ API)]
   G -->|reply or SSE stream| A
   A -->|JSON or SSE stream| F
   K[(GEMINI_API_KEY<br/>Vercel env variable)] -.-> A
