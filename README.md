@@ -2,8 +2,8 @@
 
 **Forge better prompts.** A website where students learn prompt engineering by scoring, fixing and practicing their prompts, with a working AI chatbot (**Prompt Coach**).
 
-> **Live website:** `ADD_VERCEL_URL_HERE`
-> **Team:** `ADD_NAMES_HERE`
+> **Live website:** `(https://promptforge-mocha-one.vercel.app)`
+> **Team:** `VANSHAJ, KANISHK, MITANSH, SUMIT`
 
 ## Problem
 Students write weak prompts but get no feedback on why they are weak, so they repeat the same mistakes and get poor AI outputs.
@@ -75,10 +75,10 @@ HTML, CSS, vanilla JavaScript (ES modules), Chart.js, Vercel Serverless Function
 ## AI tools used
 | Tool | Contribution |
 |---|---|
-| Claude | `ADD: e.g. generated initial website from the 5-part prompt, then added features` |
-| Gemini | `ADD: e.g. designed chatbot system prompts + powers the chatbot API` |
-| Cursor / ChatGPT | `ADD: e.g. debugging and refinement` |
-
+| Claude | Generated the initial website and backend from the five-part prompt; added the Prompt Coach chatbot, Groq/Gemini fallback, tests and deployment fixes |
+| Perplexity | Literature research on few-shot, chain-of-thought and LLM-as-a-judge; supported the problem statement |
+| Lovable | Prototyped the UI layout (hero, score radar section, chat widget) used as design reference |
+| Cursor | Code review of api/chat.js and script.js, security checks and chatbot test cases |
 ## How the chatbot works
 1. User types (or speaks) in the chat widget. `script.js` blocks empty and >1000 character messages.
 2. The browser sends `POST /api/chat` with `{ mode: "coach", messages, stream: true }`.
@@ -110,7 +110,22 @@ Run tests: `npm test` (needs Node 18+).
 - Open a Pull Request, another member reviews, then merge. GitHub Actions runs the tests on every push.
 
 ## Screenshots
-`ADD screenshots: X-Ray + radar, AI Judge, Diff view, Battle (AI mode), Technique Lab, Progress graph, Chatbot, Light theme`
 
+All screenshots of the working PromptForge website (X-Ray, AI Judge, Before/After diff, Prompt Battle, Hinglish Mode, Technique Lab, Prompt Coach chatbot, progress graph and themes) are available here:
+
+🔗 **[View all screenshots] https://photos.icloud.com/shared/album/078j-im56LaQFQF0-IeK3S7Jg **
+
+> Note: this link is valid for 30 days from the date of submission. Date created: 25 Nov 2026.
+
+| Section | What the screenshot shows |
+|---|---|
+| Prompt X-Ray | Five-part score, radar chart and missing parts |
+| AI Judge | Per-part score (0-10) with tips |
+| Before/After diff | AI rewrite with added/removed words |
+| Prompt Battle | Level target, player prompt and AI judge result |
+| Hinglish Mode | Hinglish input converted to a structured English prompt |
+| Technique Lab | Same task run with four prompting techniques |
+| Prompt Coach | Chatbot reply, error handling and suggested questions |
+| Progress and themes | History graph, dark and light theme |
 ## Prompt documentation
 See [PROMPTS.md](PROMPTS.md).
