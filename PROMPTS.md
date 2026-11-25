@@ -72,4 +72,34 @@ Prompt techniques applied during development: role-based prompting, structured p
 |---|---|---|
 | Chatbot returned 500 on Vercel | `GEMINI_API_KEY` not set in Vercel env | Added it in Project Settings → Environment Variables and redeployed |
 | `429 Too many requests` | Free API quota / rate limit | Friendly message + retry hint |
-| `ADD yours` | | |
+## Initial project-building prompt (five parts)
+Saved in prompts/initial_prompt.txt. Role: senior full-stack developer and prompt teacher. Task: build PromptForge with a real AI chatbot. Context: students write weak prompts and get no feedback. Constraints: HTML/CSS/JS, Vercel serverless, Groq + Gemini, error handling. Output format: folder tree, full code, README, PROMPTS.md.
+
+## Prompt evolution
+| Version | Prompt | Problem / Improvement |
+|---|---|---|
+| V1 | Make a chatbot for my website. | Too vague: no tech, no purpose, generic code |
+| V2 | + Role and tech stack | Better code, but no error handling or streaming |
+| V3 | Full five-part prompt | Complete chatbot with streaming, validation, safe keys |
+
+## Chain prompting used
+1. Five-part prompt → website generated
+2. Follow-up 1 → chatbot improved (typing indicator, clear button, history)
+3. Follow-up 2 → bug review and error handling fixes
+4. Cursor review → test cases
+
+## Techniques used
+- Role-based prompting: "Act as a senior web developer / code reviewer / research assistant"
+- Structured prompting: Role-Task-Context-Constraints-Output Format
+- Context-based prompting: problem, audience and purpose in every prompt
+- Prompt refinement: V1 → V2 → V3
+- Reverse prompting and evaluation: AI Judge and Battle judge score outputs; outputs checked against test cases
+- Clear constraints: JSON-only output, word limits, refusal rules
+
+## Errors faced and how we fixed them
+| Error | Cause | Fix |
+|---|---|---|
+| Vercel 404 NOT_FOUND | Project files were in a nested folder | Pushed files at repo root / set Root Directory |
+| Gemini model no longer available | Model was retired | Changed model name and made it configurable via env variable |
+| 503 "high demand" from Gemini | Free tier overloaded | Retry once, then automatic fallback to Groq as primary |
+| "Load failed" in chatbot | Request timed out / network error | Added maxDuration in vercel.json, shorter retries, friendly error message |
