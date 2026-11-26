@@ -76,3 +76,5 @@ Saved in prompts/initial_prompt.txt. Role: senior full-stack developer and promp
 | Gemini model no longer available | Model was retired | Changed model name and made it configurable via env variable |
 | 503 "high demand" from Gemini | Free tier overloaded | Retry once, then automatic fallback to Groq as primary |
 | "Load failed" in chatbot | Request timed out / network error | Added maxDuration in vercel.json, shorter retries, friendly error message |
+##screenshots
+link:https://photos.icloud.com/shared/album/01eey0lOT5gApo9Jjat_6nzOg
